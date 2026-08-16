@@ -78,6 +78,7 @@ export const config = Object.freeze({
   /* integrations (all optional — features degrade, nothing crashes) */
   GEMINI_API_KEY: str('GEMINI_API_KEY'),
   GEMINI_MODEL: str('GEMINI_MODEL', 'gemini-2.5-flash'),
+  GEMINI_IMAGE_MODEL: str('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image'),
   OPENWEATHER_API_KEY: str('OPENWEATHER_API_KEY'),
   TMDB_API_KEY: str('TMDB_API_KEY'),
   OMDB_API_KEY: str('OMDB_API_KEY'),
@@ -96,6 +97,8 @@ export const config = Object.freeze({
   /** Banner shown on the main menu: a URL, or a path relative to the project. */
   MENU_IMAGE: str('MENU_IMAGE', 'assets/banner.png'),
   MENU_TAGLINE: str('MENU_TAGLINE', 'EMBRACE THE NOTHING. BECOME EVERYTHING.'),
+  MENU_FOOTER: str('MENU_FOOTER', 'Void x Hash v.1.0.0'),
+  INTERACTIVE_MENUS: bool('INTERACTIVE_MENUS', false),
 
   /* web */
   PORT: int('PORT', 8000),

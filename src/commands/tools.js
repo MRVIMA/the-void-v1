@@ -4,6 +4,7 @@ import {
   audioFilter,
   brandSticker,
   detectType,
+  imageToCaptionSticker,
   imageToSticker,
   stickerToImage,
   toMp3,
@@ -50,6 +51,33 @@ command(
       author: author || config.OWNER_NAME,
     });
 
+    return m.reply({ sticker: webp });
+  },
+);
+
+command(
+  {
+    name: 'captionsticker',
+    alias: ['csticker', 'memesticker', 'stickercaption'],
+    category: 'tools',
+    desc: 'Turn an image into a sticker with caption text',
+    usage: '.captionsticker your caption (reply to an image)',
+    react: '💬',
+    cooldown: 4000,
+  },
+  async ({ m, text }) => {
+    const caption = text.trim();
+    if (!caption) return m.reply('Reply to an image with `.captionsticker your caption`.');
+    if (caption.length > 180) return m.reply('Keep the sticker caption under 180 characters.');
+
+    const { buffer, target } = await grab(m, { want: 'an image' });
+    const { mime } = await detectType(buffer);
+    if (!mime.startsWith('image') || target.type === 'stickerMessage') {
+      return m.reply('Caption stickers currently support images. Reply to a photo and try again.');
+    }
+
+    let webp = await imageToCaptionSticker(buffer, caption);
+    webp = await brandSticker(webp, { pack: config.BOT_NAME, author: config.OWNER_NAME });
     return m.reply({ sticker: webp });
   },
 );

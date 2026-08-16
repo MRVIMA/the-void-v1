@@ -135,8 +135,9 @@ export async function probe(url) {
  * @param {boolean} [options.audio]   extract audio as mp3 instead of video
  * @param {number}  [options.height]  cap video height, default 720
  * @param {object}  [options.info]    pre-fetched probe() result, to skip a round-trip
+ * @param {number}  [options.audioBitrate] MP3 bitrate in kbps
  */
-export async function download(url, { audio = false, height = 720, info: known = null } = {}) {
+export async function download(url, { audio = false, height = 720, audioBitrate = 192, info: known = null } = {}) {
   const info = known ?? (await probe(url));
 
   if (info.isLive) throw new Error('That is a live stream — there is nothing to download.');
@@ -153,7 +154,7 @@ export async function download(url, { audio = false, height = 720, info: known =
   await acquire();
   try {
     const format = audio
-      ? ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '5']
+      ? ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', `${audioBitrate}K`]
       : [
           '-f',
           `bestvideo[height<=?${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=?${height}][ext=mp4]/best[height<=?${height}]/best`,

@@ -152,6 +152,61 @@ export async function imageToSticker(buffer, { crop = false } = {}) {
     .toBuffer();
 }
 
+const escapeSvg = (value) => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&apos;');
+
+function captionLines(text, max = 24) {
+  const words = String(text).trim().split(/\s+/);
+  const lines = [];
+  for (const word of words) {
+    const current = lines.at(-1);
+    if (!current || `${current} ${word}`.length > max) lines.push(word);
+    else lines[lines.length - 1] = `${current} ${word}`;
+  }
+  if (lines.length > 3) {
+    lines[2] = `${lines.slice(2).join(' ').slice(0, max - 1).trim()}…`;
+    lines.length = 3;
+  }
+  return lines;
+}
+
+/** Still image -> sticker with a readable caption panel along the bottom. */
+export async function imageToCaptionSticker(buffer, caption) {
+  const lines = captionLines(caption);
+  if (!lines.length) return imageToSticker(buffer);
+
+  const panelHeight = lines.length === 1 ? 86 : lines.length === 2 ? 122 : 154;
+  const imageHeight = 512 - panelHeight;
+  const fontSize = lines.some((line) => line.length > 20) ? 30 : 34;
+  const firstY = (panelHeight - (lines.length - 1) * (fontSize + 7)) / 2 + fontSize * 0.34;
+  const labels = lines.map((line, index) =>
+    `<text x="256" y="${Math.round(firstY + index * (fontSize + 7))}" text-anchor="middle" ` +
+    `font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700" fill="#ffffff">` +
+    `${escapeSvg(line)}</text>`).join('');
+  const panel = Buffer.from(
+    `<svg width="512" height="${panelHeight}" xmlns="http://www.w3.org/2000/svg">` +
+    `<rect width="512" height="${panelHeight}" rx="18" fill="#090909"/>${labels}</svg>`,
+  );
+  const picture = await sharp(buffer, { animated: false })
+    .resize(512, imageHeight, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+
+  return sharp({
+    create: { width: 512, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite([{ input: picture, top: 0, left: 0 }, { input: panel, top: imageHeight, left: 0 }])
+    .webp({ quality: 82, effort: 4 })
+    .toBuffer();
+}
+
 /** Video/GIF -> animated WebP sticker, capped so WhatsApp accepts it. */
 export async function videoToSticker(buffer, { seconds = 8, fps = 15 } = {}) {
   const filter = `fps=${fps},scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000`;
@@ -230,5 +285,5 @@ export async function detectType(buffer) {
 
 export default {
   ffmpeg, toVoiceNote, toMp3, audioFilter, toMp4, toGifVideo, mediaInfo,
-  imageToSticker, videoToSticker, stickerToImage, brandSticker, detectType, sweepTmp,
+  imageToSticker, imageToCaptionSticker, videoToSticker, stickerToImage, brandSticker, detectType, sweepTmp,
 };

@@ -1,6 +1,15 @@
 import { command } from '../core/registry.js';
-import { fetchAndSend } from '../lib/deliver.js';
+import { status } from '../lib/deliver.js';
+import { beginDownloadFlow } from '../lib/download-flow.js';
+import { probe } from '../lib/ytdlp.js';
 import { isUrl } from '../lib/http.js';
+
+async function preview(sock, m, prefix, url, mode = 'both') {
+  const bar = await status(m, '🔎 Reading the link…');
+  const info = await probe(url);
+  await bar.update('✅ Link verified. Choose below.');
+  return beginDownloadFlow(sock, m, { url, info, prefix, mode, discreet: true });
+}
 
 /**
  * Adult-site downloads.
@@ -29,10 +38,10 @@ command(
     usage: '.nsfwdl <url>',
     react: '🔞',
   },
-  async ({ m, text }) => {
+  async ({ sock, m, text, prefix }) => {
     const url = text.trim();
     if (!isUrl(url)) return m.reply('Give me a link, e.g. `.nsfwdl https://…`');
-    return fetchAndSend(m, url, { discreet: true });
+    return preview(sock, m, prefix, url);
   },
 );
 
@@ -45,10 +54,10 @@ command(
     usage: '.nsfwaudio <url>',
     react: '🔞',
   },
-  async ({ m, text }) => {
+  async ({ sock, m, text, prefix }) => {
     const url = text.trim();
     if (!isUrl(url)) return m.reply('Give me a link, e.g. `.nsfwaudio https://…`');
-    return fetchAndSend(m, url, { audio: true, discreet: true });
+    return preview(sock, m, prefix, url, 'audio');
   },
 );
 
@@ -63,13 +72,13 @@ const site = (name, alias, label, host) =>
       usage: `.${name} https://${host}/…`,
       react: '🔞',
     },
-    async ({ m, text }) => {
+    async ({ sock, m, text, prefix }) => {
       const url = text.trim();
       if (!isUrl(url)) return m.reply(`Give me a ${label} link, e.g. \`.${name} https://${host}/…\``);
       if (!new URL(url).hostname.includes(host.split('.')[0])) {
         return m.reply(`That is not a ${label} link. Use \`.nsfwdl\` for other sites.`);
       }
-      return fetchAndSend(m, url, { discreet: true });
+      return preview(sock, m, prefix, url);
     },
   );
 

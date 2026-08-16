@@ -1,5 +1,8 @@
 import config from '../config.js';
 import { banner } from './banner.js';
+import { log } from './logger.js';
+
+const logger = log('menu');
 
 /**
  * Shared menu chrome.
@@ -23,6 +26,7 @@ const ICON = {
   download: '⏬',
   general: '📜',
   group: '👥',
+  image: '🎨',
   movie: '🎬',
   nsfw: '🔞',
   owner: '🔑',
@@ -114,8 +118,22 @@ export function fit(text, prefix) {
  * across all of them.
  */
 export async function withBanner(m, name, caption) {
+  const credit = config.MENU_FOOTER?.trim();
+  const brandedCaption = credit && !caption.trimEnd().endsWith(credit)
+    ? `${caption.trimEnd()}\n\n${credit}`
+    : caption;
   const image = await banner(name);
-  return image ? m.reply({ image, caption }) : m.reply(caption);
+  if (!image) return m.reply(brandedCaption);
+
+  try {
+    return await m.reply({ image, caption: brandedCaption });
+  } catch (err) {
+    // WhatsApp's media hosts occasionally reject every upload endpoint even
+    // while ordinary messages still work. A menu must not disappear merely
+    // because its decorative banner could not be uploaded.
+    logger.warn({ name, err: err.message }, 'banner upload failed — retrying menu as text');
+    return m.reply(brandedCaption);
+  }
 }
 
 export default {

@@ -12,7 +12,7 @@ A WhatsApp bot built on Baileys 7 — rebuilt from nothing, owned by nobody but 
 
 ![Node](https://img.shields.io/badge/NODE-22%2B-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=8b0000)
 ![Baileys](https://img.shields.io/badge/BAILEYS-7.0-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=8b0000)
-![Commands](https://img.shields.io/badge/COMMANDS-73-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=8b0000)
+![Commands](https://img.shields.io/badge/COMMANDS-88-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=8b0000)
 ![License](https://img.shields.io/badge/MIT-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=8b0000)
 
 </div>
@@ -90,17 +90,18 @@ an 8-digit pairing code for **Linked devices → Link with phone number**.
 
 ## ▚ THE ARSENAL
 
-**73 commands.** `.menu` lists them live; `.menu <command>` explains one.
+**88 visible commands.** `.menu` lists them live; `.menu <command>` explains one.
 
 <details open>
 <summary><b>⌁ DOWNLOAD</b> — one yt-dlp engine, ~1800 sites</summary>
 
-`.song` `.video` `.dl` `.dlaudio` `.tiktok` `.fb` `.insta` `.twitter`
+`.youtube` `.song` `.spotify` `.video` `.dl` `.dlaudio` `.tiktok` `.fb` `.insta` `.twitter`
 `.mediafire` `.dlupdate`
 
-`.song` and `.video` accept a **search term or a link**. `.video lofi 480`
-caps quality. `.dlupdate` refreshes the yt-dlp engine when a site changes and
-downloads start failing.
+`.youtube`, `.song`, and `.video` accept a **search term or a link**. Download
+menus show the link details before transferring media, then ask for format,
+quality, and whether MP3 audio should be sent as Audio Type or Document Type.
+`.dlupdate` refreshes the yt-dlp engine when a site changes and downloads fail.
 
 </details>
 
@@ -119,11 +120,13 @@ Admins and sudo users are always exempt.
 <details>
 <summary><b>⌁ TOOLS</b> — media conversion</summary>
 
-`.sticker` `.toimage` `.tovoice` `.tomp3` `.vv`
+`.sticker` `.captionsticker` `.toimage` `.tovoice` `.tomp3` `.vv`
 
 `.sticker` handles stills, video and GIFs, brands the pack with your bot name,
 and falls back to an unbranded sticker rather than failing if metadata cannot
 be written.
+Reply to a photo with `.captionsticker your text` to place a readable caption
+panel on the finished sticker.
 
 </details>
 
@@ -145,6 +148,17 @@ per-user, in RAM only, and dies with the process. Nothing is written to disk.
 </details>
 
 <details>
+<summary><b>⌁ IMAGE</b> — images, logos and artwork</summary>
+
+`.image` `.logo` `.wallpaper` `.poster` `.avatar` `.editimage`
+
+Generate artwork from a description, or reply to an existing image with
+`.editimage <instructions>`. Image requests run one at a time to keep memory
+and API usage predictable.
+
+</details>
+
+<details>
 <summary><b>⌁ MOVIE</b> — metadata and subtitles</summary>
 
 `.movie` `.tv` `.trending` `.cast` `.imdb` `.sub` `.subget`
@@ -158,10 +172,16 @@ Sinhala; `SUBTITLE_LANGS` sets your default.
 <summary><b>⌁ OWNER</b> — runtime control</summary>
 
 `.settings` `.set` `.mode` `.prefix` `.ban` `.unban` `.banlist` `.block`
-`.unblock` `.restart`
+`.unblock` `.restart` `.sudo` `.groupsudo` `.nsfwdelivery` `.autoreply`
 
 `.set <key> <value>` changes behaviour live — no restart, no redeploy.
 `.set antiDelete on`, `.set autoRead on`, and so on.
+In a group, `.groupsudo on` authorizes only that group while global mode stays
+private. `.groupsudo add @user` grants group-local admin command access without
+making that user a global sudo user.
+`.nsfwdelivery document` switches only the current group from view-once NSFW
+videos to private-name MP4 documents; `.nsfwdelivery viewonce` restores the
+default. Only a permanent owner can change it.
 
 </details>
 
@@ -193,7 +213,8 @@ Everything lives in `.env`. Nothing is hardcoded.
 
 | Key | Default | Purpose |
 |---|---|---|
-| `OWNER_NUMBER` | — | **Required.** Digits only |
+| `OWNER_NUMBER` | — | **Required.** One or more comma-separated numbers |
+| `SUDO_NUMBERS` | — | Optional permanent sudo numbers |
 | `PREFIX` | `.` | Command character |
 | `MODE` | `private` | Who may issue commands |
 | `MONGO_URI` | — | Optional; SQLite is used when absent |
@@ -207,7 +228,7 @@ the bot never refuses to start over an integration.
 
 | Key | Unlocks | Free from |
 |---|---|---|
-| `GEMINI_API_KEY` | `.ai` `.translate` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `GEMINI_API_KEY` | `.ai` `.translate` and all image commands | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | `TMDB_API_KEY` | `.movie` `.tv` `.trending` `.cast` | [themoviedb.org](https://www.themoviedb.org/settings/api) |
 | `OMDB_API_KEY` | `.imdb` | [omdbapi.com](https://www.omdbapi.com/apikey.aspx) |
 | `OPENSUBTITLES_API_KEY` | `.sub` `.subget` | [opensubtitles.com](https://www.opensubtitles.com/consumers) |

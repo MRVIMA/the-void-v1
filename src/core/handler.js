@@ -1,11 +1,12 @@
 import config from '../config.js';
 import { log } from '../lib/logger.js';
-import { bans, settings as botSettings, groups } from '../store/index.js';
+import { bans, settings as botSettings, groups, sudoAccess } from '../store/index.js';
 import { selfIds, toNumber } from '../lib/jid.js';
 import * as group from './group.js';
 import { resolve } from './registry.js';
 import { remember } from './msgcache.js';
 import serialize from './serialize.js';
+import { consumeMenuReply } from '../lib/interactive.js';
 
 const logger = log('handler');
 
@@ -69,7 +70,10 @@ export async function handleMessage(sock, raw) {
   const number = m.fromMe ? [...selfIds(sock)].find((v) => /^\d+$/.test(v)) ?? '' : await toNumber(sock, m.sender);
   const isSelf = m.fromMe;
   const isOwner = isSelf || (number && config.OWNER_NUMBERS.includes(number));
-  const isSudo = isOwner || (number && config.SUDO_NUMBERS.includes(number));
+  const isSudo =
+    isOwner ||
+    Boolean(number && config.SUDO_NUMBERS.includes(number)) ||
+    Boolean(number && (await sudoAccess.has(number)));
 
   /* hard blocks, before anything else runs */
   if (!isSudo) {
@@ -82,7 +86,13 @@ export async function handleMessage(sock, raw) {
   /* group context */
   const meta = m.isGroup ? await group.metadata(sock, m.chat) : null;
   const groupSettings = m.isGroup ? await groups.get(m.chat) : null;
-  const isAdmin = m.isGroup ? isSudo || group.isAdmin(meta, m.sender) : false;
+  const isGroupSudo = Boolean(
+    m.isGroup &&
+    number &&
+    Array.isArray(groupSettings?.privateSudo) &&
+    groupSettings.privateSudo.includes(number),
+  );
+  const isAdmin = m.isGroup ? isSudo || isGroupSudo || group.isAdmin(meta, m.sender) : false;
   const isBotAdmin = m.isGroup ? [...selfIds(sock)].some((id) => group.isAdmin(meta, id)) : false;
 
   const settings = await botSettings.all();
@@ -95,6 +105,7 @@ export async function handleMessage(sock, raw) {
     isSelf,
     isOwner,
     isSudo,
+    isGroupSudo,
     isAdmin,
     isBotAdmin,
     meta,
@@ -117,6 +128,11 @@ export async function handleMessage(sock, raw) {
   if (settings.autoRead) await sock.readMessages([m.key]).catch(() => {});
 
   /* command parsing */
+  // Reliable text menus use a quoted numeric reply ("1", "2", ...). Turn it
+  // back into the hidden command ID before normal command parsing.
+  const menuCommand = consumeMenuReply(m);
+  if (menuCommand) m.text = menuCommand;
+
   if (!m.text?.startsWith(prefix)) return;
   const [word, ...args] = m.text.slice(prefix.length).trim().split(/\s+/);
   if (!word) return;
@@ -127,7 +143,9 @@ export async function handleMessage(sock, raw) {
   /* mode gating: who is allowed to run anything at all */
   const mode = settings.mode || config.MODE;
   if (!isSudo) {
-    if (mode === 'private') return;
+    // An owner can authorize a specific group without changing the global
+    // private mode. Access never follows the user into DMs or another group.
+    if (mode === 'private' && !(m.isGroup && groupSettings?.privateAccess)) return;
     if (mode === 'group' && !m.isGroup) return;
     if (mode === 'inbox' && m.isGroup) return;
   }

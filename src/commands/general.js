@@ -4,8 +4,9 @@ import { command, commands, byCategory, resolve } from '../core/registry.js';
 import config from '../config.js';
 import { bytes, card, now, uptime, duration } from '../lib/format.js';
 import { digits } from '../lib/jid.js';
-import { saveBanner, listBanners } from '../lib/banner.js';
+import { banner, saveBanner, listBanners } from '../lib/banner.js';
 import { header, hud, footer, sectionMenu, icon, withBanner, RULE } from '../lib/menu.js';
+import { selectMenu } from '../lib/interactive.js';
 import { getStore } from '../store/index.js';
 
 /**
@@ -38,7 +39,7 @@ command(
     usage: '.menu · .menu download · .menu song',
     react: '📜',
   },
-  async ({ m, args, prefix, settings }) => {
+  async ({ sock, m, args, prefix, settings }) => {
     const sections = byCategory();
     const query = args[0]?.toLowerCase().replace(prefix, '');
 
@@ -74,16 +75,7 @@ command(
     }
 
     /* the main menu */
-    // Padding sits OUTSIDE the asterisks: WhatsApp will not bold a run that
-    // ends in a space, and renders the markers literally instead.
-    const sectionLines = [...sections.entries()]
-      .map(([name, list]) => {
-        const pad = ' '.repeat(Math.max(1, 10 - name.length));
-        return `│ ${icon(name)} *${name}*${pad}${String(list.length).padStart(2)}`;
-      })
-      .join('\n');
-
-    const caption =
+    const body =
       `${header(config.BOT_NAME, config.MENU_TAGLINE)}\n\n` +
       hud('system', [
         ['user', m.pushName || 'unknown'],
@@ -91,15 +83,20 @@ command(
         ['prefix', prefix],
         ['uptime', uptime()],
         ['commands', String(visibleCount())],
-      ]) +
-      `\n\n╭─ *SECTIONS*\n${sectionLines}\n╰${RULE}\n\n` +
-      footer([
-        `\`${prefix}menu <section>\` — open a section`,
-        `\`${prefix}menu <command>\` — command details`,
-        `\`${prefix}system\` — host and runtime info`,
-      ]);
+      ]) + `\n\nChoose a numbered section below.`;
 
-    return withBanner(m, 'menu', caption);
+    return selectMenu(sock, m, {
+      title: `${config.BOT_NAME} Menu`,
+      body,
+      button: 'Open section',
+      image: await banner('menu'),
+      footer: config.MENU_FOOTER,
+      rows: [...sections.entries()].map(([name, list]) => ({
+        title: `${icon(name)} ${name.toUpperCase()} MENU`,
+        description: `${list.length} commands`,
+        id: `${prefix}menu ${name}`,
+      })),
+    });
   },
 );
 
@@ -240,25 +237,23 @@ command(
     react: '👤',
   },
   async ({ m, sock }) => {
-    const number = config.OWNER_NUMBERS[0];
-    if (!number) return m.reply('No owner number is configured.');
+    const owners = config.OWNER_NUMBERS;
+    if (!owners.length) return m.reply('No owner number is configured.');
 
     return sock.sendMessage(
       m.chat,
       {
         contacts: {
-          displayName: config.OWNER_NAME,
-          contacts: [
-            {
+          displayName: owners.length === 1 ? config.OWNER_NAME : `${config.OWNER_NAME} Owners`,
+          contacts: owners.map((number, index) => ({
               vcard: [
                 'BEGIN:VCARD',
                 'VERSION:3.0',
-                `FN:${config.OWNER_NAME}`,
+                `FN:${config.OWNER_NAME}${owners.length > 1 ? ` ${index + 1}` : ''}`,
                 `TEL;type=CELL;type=VOICE;waid=${number}:+${number}`,
                 'END:VCARD',
               ].join('\n'),
-            },
-          ],
+            })),
         },
       },
       { quoted: m.raw },

@@ -1,4 +1,4 @@
-import { generateWAMessageFromContent, proto } from 'baileys';
+import { generateWAMessageFromContent, prepareWAMessageMedia, proto } from 'baileys';
 import config from '../config.js';
 
 const textMenus = new Map();
@@ -30,29 +30,53 @@ export function consumeMenuReply(m) {
  * Falls back to a text menu if WhatsApp rejects interactive messages for the
  * connected account type.
  */
-export async function selectMenu(sock, m, { title, body, button = 'Choose', rows, footer = '' }) {
+export async function selectMenu(sock, m, { title, body, button = 'Choose', rows, footer = '', image = null }) {
   const fallback =
     `*${title}*\n\n${body}\n\n` +
     rows.map((r, i) => `${i + 1}. *${r.title}*${r.description ? `\n   ${r.description}` : ''}`).join('\n\n') +
     `\n\n↩️ *Reply to this message with a number (1–${rows.length}).*` +
     (footer ? `\n\n${footer}` : '');
 
-  // Native single-select lists are silently dropped for many personal linked
-  // accounts (relayMessage resolves successfully, so no catch block runs).
-  // Normal text messages plus quoted number replies work on every account.
-  if (!config.INTERACTIVE_MENUS) {
-    const sent = await m.reply(fallback);
+  const rememberFallback = (sent) => {
     textMenus.set(menuKey(m), {
       messageId: sent.key.id,
       rows,
       expiresAt: Date.now() + MENU_TTL,
     });
     return sent;
+  };
+
+  const sendFallback = async () => {
+    if (image) {
+      try {
+        const source = Buffer.isBuffer(image) ? image : { url: image };
+        return rememberFallback(await m.reply({ image: source, caption: fallback }));
+      } catch {
+        // A source may expose a short-lived or blocked thumbnail URL. The menu
+        // must remain usable even when WhatsApp cannot fetch that preview.
+      }
+    }
+    return rememberFallback(await m.reply(fallback));
+  };
+
+  // Native single-select lists are silently dropped for many personal linked
+  // accounts (relayMessage resolves successfully, so no catch block runs).
+  // Normal text messages plus quoted number replies work on every account.
+  if (!config.INTERACTIVE_MENUS) {
+    return sendFallback();
   }
 
   try {
+    const source = Buffer.isBuffer(image) ? image : image ? { url: image } : null;
+    const media = image
+      ? await prepareWAMessageMedia({ image: source }, { upload: sock.waUploadToServer })
+      : {};
     const content = proto.Message.InteractiveMessage.create({
-      header: proto.Message.InteractiveMessage.Header.create({ title, hasMediaAttachment: false }),
+      header: proto.Message.InteractiveMessage.Header.create({
+        title,
+        hasMediaAttachment: Boolean(image),
+        ...media,
+      }),
       body: proto.Message.InteractiveMessage.Body.create({ text: body }),
       footer: proto.Message.InteractiveMessage.Footer.create({ text: footer }),
       nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
@@ -86,13 +110,7 @@ export async function selectMenu(sock, m, { title, body, button = 'Choose', rows
     await sock.relayMessage(m.chat, message.message, { messageId: message.key.id });
     return message;
   } catch {
-    const sent = await m.reply(fallback);
-    textMenus.set(menuKey(m), {
-      messageId: sent.key.id,
-      rows,
-      expiresAt: Date.now() + MENU_TTL,
-    });
-    return sent;
+    return sendFallback();
   }
 }
 

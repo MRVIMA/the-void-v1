@@ -15,6 +15,7 @@ export const NS = {
   STATE: 'state', // internal bookkeeping (last-seen urls, counters)
   AFK: 'afk', // afk status per user
   ANTIDELETE: 'antidelete', // cached message bodies for revoke recovery
+  SUDO: 'sudo', // runtime sudo numbers, managed by real owners
 };
 
 /**
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   welcome: false,
   goodbye: false,
   aiChat: false, // reply to plain messages with AI in DMs
+  autoReply: false,
   reactToCommands: true,
   errorDetails: false, // show stack traces to the owner
   adultCommands: config.ENABLE_ADULT,
@@ -68,26 +70,37 @@ function diagnose(err, uri = '') {
     err?.name === 'MongoServerSelectionError' ||
     /not whitelisted|ETIMEDOUT|ECONNREFUSED|ServerSelection|timed out/i.test(message)
   ) {
-    return "Could not reach the cluster. Usually this host's IP is not allowed — add it in Atlas > Network Access (0.0.0.0/0 for platforms without a fixed outbound IP). Otherwise check the host and port.";
+    return "Could not reach the cluster. Usually this host's IP is not allowed - add it in Atlas > Network Access (0.0.0.0/0 for platforms without a fixed outbound IP). Otherwise check the host and port.";
   }
   return 'Check MONGO_URI, then Atlas Network Access and Database Access.';
 }
 
 let store = null;
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Connects the configured backend. Falls back to SQLite if Mongo is down. */
 export async function initStore() {
   if (store) return store;
 
   if (config.MONGO_URI) {
-    try {
-      store = await createMongoStore(config.MONGO_URI);
-    } catch (err) {
+    let lastError;
+    for (let attempt = 1; attempt <= 3 && !store; attempt++) {
+      try {
+        store = await createMongoStore(config.MONGO_URI);
+      } catch (err) {
+        lastError = err;
+        if (attempt < 3) {
+          logger.warn({ attempt, delay: attempt * 1500 }, 'MongoDB connection delayed - retrying');
+          await wait(attempt * 1500);
+        }
+      }
+    }
+    if (!store) {
       // Falling back to SQLite keeps the bot alive, but on a host with no
       // persistent disk it means settings silently reset on every restart.
       // Name the actual cause so this is fixable from the log alone.
-      logger.error({ err: err.message }, 'MongoDB unreachable — falling back to local SQLite');
-      logger.error(`  → ${diagnose(err, config.MONGO_URI)}`);
+      logger.error({ err: lastError?.message }, 'MongoDB unreachable after 3 attempts - falling back to local SQLite');
+      logger.error(`  -> ${diagnose(lastError, config.MONGO_URI)}`);
     }
   }
   if (!store) {
@@ -135,6 +148,8 @@ export const settings = {
 /* ── per-group settings ──────────────────────────────────────────────────── */
 
 export const DEFAULT_GROUP = {
+  privateAccess: false,
+  privateSudo: [],
   antilink: false,
   antilinkAction: 'delete', // delete | warn | kick
   antibad: false,
@@ -146,6 +161,7 @@ export const DEFAULT_GROUP = {
   goodbyeText: '',
   mute: false,
   nsfw: false,
+  nsfwViewOnce: true,
   warnLimit: 3,
 };
 
@@ -181,4 +197,38 @@ export const bans = {
   },
 };
 
-export default { initStore, getStore, settings, groups, bans, NS };
+/* ── runtime sudo access ────────────────────────────────────────────────── */
+
+let sudoCache = null;
+let sudoCacheUntil = 0;
+
+async function readSudoSet() {
+  if (sudoCache && Date.now() < sudoCacheUntil) return sudoCache;
+  const rows = await getStore().all(NS.SUDO);
+  sudoCache = new Set(rows.map((row) => row.key));
+  sudoCacheUntil = Date.now() + 60_000;
+  return sudoCache;
+}
+
+export const sudoAccess = {
+  async has(number) {
+    return (await readSudoSet()).has(String(number));
+  },
+  async add(number, addedBy = '') {
+    const key = String(number);
+    await getStore().set(NS.SUDO, key, { addedBy, at: Date.now() });
+    sudoCache?.add(key);
+    return key;
+  },
+  async remove(number) {
+    const key = String(number);
+    const removed = await getStore().delete(NS.SUDO, key);
+    sudoCache?.delete(key);
+    return removed;
+  },
+  async list() {
+    return getStore().all(NS.SUDO);
+  },
+};
+
+export default { initStore, getStore, settings, groups, bans, sudoAccess, NS };

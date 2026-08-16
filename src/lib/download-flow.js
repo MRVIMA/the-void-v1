@@ -4,9 +4,11 @@ import { bytes, compact, duration, truncate } from './format.js';
 import { selectMenu } from './interactive.js';
 import { download, queueDepth } from './ytdlp.js';
 import { status, infoHeader } from './deliver.js';
+import { groups } from '../store/index.js';
 
 const requests = new Map();
 const TTL = 10 * 60 * 1000;
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const cleanName = (name, ext) =>
   `${String(name || 'media').replace(/[\\/:*?"<>|]/g, '').slice(0, 110)}.${ext}`;
@@ -21,6 +23,34 @@ function details(request) {
     `${info.views ? `👁 ${compact(info.views)} views\n` : ''}` +
     `${info.extractor ? `🔗 ${info.extractor}` : ''}`
   ).trim();
+}
+
+const previewThumbnail = (request) =>
+  request.discreet ? null : request.origin.thumbnail || request.info.thumbnail || null;
+
+async function uploadMedia(m, content, bar, { attempts = 3 } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await m.reply(content);
+      return true;
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts) {
+        await bar.update(`📤 WhatsApp upload failed — retrying (${attempt + 1}/${attempts})…`).catch(() => {});
+        await wait(1500 * attempt);
+      }
+    }
+  }
+
+  const reason = /Media upload failed on all hosts/i.test(lastError?.message || '')
+    ? 'WhatsApp rejected every media upload server'
+    : (lastError?.message || 'unknown upload error');
+  await bar.update(
+    `❌ Upload failed after ${attempts} attempts: ${reason}.\n\n` +
+    'The download completed, but WhatsApp did not accept the upload. Wait a moment and run the command again.',
+  ).catch(() => {});
+  return false;
 }
 
 function create(m, data) {
@@ -81,6 +111,7 @@ export async function showQualityMenu(sock, m, token, type, prefix) {
   return selectMenu(sock, m, {
     title: `${type === 'audio' ? 'Audio' : 'Video'} Quality`,
     body: `${details(request)}\n\nVerify the details, then choose quality:`,
+    image: previewThumbnail(request),
     button: 'Select quality',
     footer: config.MENU_FOOTER,
     rows: [
@@ -102,6 +133,7 @@ export async function beginDownloadFlow(sock, m, { url, info, prefix, mode = 'bo
   return selectMenu(sock, m, {
     title: 'Download Information',
     body: `${details(request)}\n\nVerify the link details. What do you need?`,
+    image: previewThumbnail(request),
     button: 'Select format',
     footer: config.MENU_FOOTER,
     rows: [
@@ -181,7 +213,8 @@ export async function executeDownload(m, token, delivery) {
       mimetype: 'audio/mpeg',
       fileName: cleanName(title, 'mp3'),
     };
-    await m.reply(
+    const sent = await uploadMedia(
+      m,
       delivery === 'document'
         ? { document: result.buffer, ...common }
         : {
@@ -199,17 +232,31 @@ export async function executeDownload(m, token, delivery) {
                 }
               : undefined,
           },
+      bar,
     );
+    if (!sent) return null;
   } else {
-    await m.reply({
-      video: result.buffer,
-      mimetype: 'video/mp4',
-      fileName: cleanName(title, 'mp4'),
-      caption: request.discreet
-        ? config.MENU_FOOTER
-        : `${infoHeader(request.info)}\n🎞 ${request.quality}p\n\n${config.MENU_FOOTER}`,
-      ...(request.discreet ? { viewOnce: true } : {}),
-    });
+    const groupDelivery = request.discreet && m.isGroup ? await groups.get(m.chat) : null;
+    const discreetDocument = request.discreet && (!m.isGroup || groupDelivery?.nsfwViewOnce === false);
+    const content = discreetDocument
+      ? {
+          document: result.buffer,
+          mimetype: 'video/mp4',
+          // Do not leak an adult title into the DM's document filename.
+          fileName: `private-video-${request.quality}p.mp4`,
+          caption: config.MENU_FOOTER,
+        }
+      : {
+          video: result.buffer,
+          mimetype: 'video/mp4',
+          fileName: request.discreet ? `private-video-${request.quality}p.mp4` : cleanName(title, 'mp4'),
+          caption: request.discreet
+            ? config.MENU_FOOTER
+            : `${infoHeader(request.info)}\n🎞 ${request.quality}p\n\n${config.MENU_FOOTER}`,
+          ...(request.discreet ? { viewOnce: true } : {}),
+        };
+    const sent = await uploadMedia(m, content, bar);
+    if (!sent) return null;
   }
 
   return bar.update(`✅ Sent at ${request.quality}${unit}.`);
@@ -222,4 +269,3 @@ const cleanup = setInterval(() => {
 cleanup.unref();
 
 export const pendingDownloadCount = () => requests.size;
-

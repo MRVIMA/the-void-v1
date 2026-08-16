@@ -1,6 +1,6 @@
 import { command } from '../core/registry.js';
 import config from '../config.js';
-import { DEFAULT_SETTINGS, bans, settings as botSettings } from '../store/index.js';
+import { DEFAULT_SETTINGS, NS, bans, getStore, groups, settings as botSettings, sudoAccess } from '../store/index.js';
 import { card, truncate } from '../lib/format.js';
 import { digits, toJid } from '../lib/jid.js';
 import { header, hud, footer, fit, withBanner, RULE } from '../lib/menu.js';
@@ -25,7 +25,7 @@ function coerce(key, raw) {
 /** Settings grouped for display. Anything unlisted lands in "other". */
 const SETTING_GROUPS = {
   core: ['prefix', 'mode'],
-  automation: ['autoRead', 'autoReadStatus', 'autoReactStatus', 'statusReactEmoji', 'alwaysOnline', 'autoTyping', 'autoRecording', 'aiChat'],
+  automation: ['autoRead', 'autoReadStatus', 'autoReactStatus', 'statusReactEmoji', 'alwaysOnline', 'autoTyping', 'autoRecording', 'aiChat', 'autoReply'],
   protection: ['antiDelete', 'antiDeleteTarget', 'antiCall', 'antiCallAction'],
   chat: ['welcome', 'goodbye', 'reactToCommands', 'errorDetails', 'adultCommands'],
 };
@@ -139,10 +139,223 @@ command(
   },
 );
 
+command(
+  {
+    name: 'autoreply',
+    alias: ['ar'],
+    category: 'owner',
+    desc: 'Control the automated-agent reply for direct messages',
+    usage: '.autoreply on · .autoreply off · .autoreply set <message>',
+    ownerOnly: true,
+    react: '🤖',
+  },
+  async ({ m, args, prefix }) => {
+    const action = (args[0] || 'status').toLowerCase();
+    const store = getStore();
+    const custom = await store.get(NS.AUTOREPLY, 'message');
+
+    if (action === 'status') {
+      return m.reply(
+        `🤖 Auto reply is *${(await botSettings.on('autoReply')) ? 'ON' : 'OFF'}*.\n` +
+        `Message: ${custom || '_default automated-agent message_'}\n\n` +
+        `Use \`${prefix}autoreply on|off\` or \`${prefix}autoreply set <message>\`.`,
+      );
+    }
+
+    if (['on', 'off'].includes(action)) {
+      await botSettings.set('autoReply', action === 'on');
+      return m.reply(`🤖 Automated-agent replies are now *${action.toUpperCase()}* for direct messages.`);
+    }
+
+    if (action === 'set') {
+      const message = args.slice(1).join(' ').trim();
+      if (!message) return m.reply(`Give a message, e.g. \`${prefix}autoreply set Thanks for contacting me.\``);
+      if (message.length > 500) return m.reply('Keep the automatic reply under 500 characters.');
+      await store.set(NS.AUTOREPLY, 'message', message);
+      return m.reply('🤖 Automatic reply message updated.');
+    }
+
+    if (action === 'reset') {
+      await store.delete(NS.AUTOREPLY, 'message');
+      return m.reply('🤖 Automatic reply message restored to the default.');
+    }
+
+    return m.reply(`Use \`${prefix}autoreply on|off|status|reset\` or \`${prefix}autoreply set <message>\`.`);
+  },
+);
+
 /* ── bans ────────────────────────────────────────────────────────────────── */
 
 const targetOf = (m, args) =>
   m.mentions?.[0] || m.quoted?.sender || (args[0] ? toJid(args[0]) : '');
+
+command(
+  {
+    name: 'sudo',
+    alias: ['setsudo'],
+    category: 'owner',
+    desc: 'Add, remove or list runtime sudo users',
+    usage: '.sudo add 947xxxxxxxx · .sudo remove 947xxxxxxxx · .sudo list',
+    ownerOnly: true,
+    react: '🔐',
+  },
+  async ({ m, args, isOwner, number, prefix }) => {
+    // `ownerOnly` normally means owner OR sudo in this bot. Access management
+    // is more sensitive: only an OWNER_NUMBER from .env (or the bot itself)
+    // may grant another user elevated access.
+    if (!isOwner) return m.reply('🔒 Only a permanent owner can manage sudo users.');
+
+    const action = (args[0] || 'list').toLowerCase();
+    if (action === 'list') {
+      const runtime = await sudoAccess.list();
+      const configured = config.SUDO_NUMBERS;
+      const lines = [
+        '*Permanent owners (.env)*',
+        ...config.OWNER_NUMBERS.map((n) => `• ${n}`),
+        '',
+        '*Configured sudo (.env)*',
+        ...(configured.length ? configured.map((n) => `• ${n}`) : ['• none']),
+        '',
+        '*Runtime sudo (MongoDB)*',
+        ...(runtime.length ? runtime.map((row) => `• ${row.key}`) : ['• none']),
+      ];
+      return m.reply(`${lines.join('\n')}\n\n${config.MENU_FOOTER}`);
+    }
+
+    if (!['add', 'remove', 'del', 'delete'].includes(action)) {
+      return m.reply(`Usage:\n\`${prefix}sudo add <number>\`\n\`${prefix}sudo remove <number>\`\n\`${prefix}sudo list\``);
+    }
+
+    const jid = m.mentions?.[0] || m.quoted?.sender || (args[1] ? toJid(args[1]) : '');
+    const target = digits(jid);
+    if (!/^\d{8,15}$/.test(target)) {
+      return m.reply('Give a valid international number, digits only, or mention/reply to the user.');
+    }
+
+    if (action === 'add') {
+      if (config.OWNER_NUMBERS.includes(target)) return m.reply(`*${target}* is already a permanent owner.`);
+      if (config.SUDO_NUMBERS.includes(target)) return m.reply(`*${target}* is already configured as sudo in .env.`);
+      await sudoAccess.add(target, number);
+      return m.reply(`🔐 Added *${target}* as sudo.\nThe change is active immediately.`);
+    }
+
+    if (config.OWNER_NUMBERS.includes(target)) return m.reply('A permanent owner cannot be removed with `.sudo`.');
+    if (config.SUDO_NUMBERS.includes(target)) {
+      return m.reply(`*${target}* comes from SUDO_NUMBERS in .env. Remove it there and restart.`);
+    }
+    const removed = await sudoAccess.remove(target);
+    return m.reply(removed ? `🔓 Removed sudo access from *${target}*.` : `*${target}* was not a runtime sudo user.`);
+  },
+);
+
+command(
+  {
+    name: 'groupsudo',
+    alias: ['privategroup', 'groupaccess'],
+    category: 'owner',
+    desc: 'Authorize this group while the bot stays in private mode',
+    usage: '.groupsudo on · .groupsudo add @user · .groupsudo list',
+    ownerOnly: true,
+    groupOnly: true,
+    react: '👥',
+  },
+  async ({ m, args, isOwner, prefix, groupSettings }) => {
+    // This changes the private-mode boundary, so configured/runtime sudo users
+    // cannot grant access. Only an OWNER_NUMBER (or the bot itself) may do it.
+    if (!isOwner) return m.reply('🔒 Only a permanent owner can manage private group access.');
+
+    const action = (args[0] || 'status').toLowerCase();
+    const members = Array.isArray(groupSettings.privateSudo) ? groupSettings.privateSudo : [];
+
+    if (['status', 'list'].includes(action)) {
+      return m.reply(
+        `👥 *Private Group Access*\n\n` +
+        `Access: *${groupSettings.privateAccess ? 'enabled' : 'disabled'}*\n` +
+        `Group sudo:\n${members.length ? members.map((n) => `• ${n}`).join('\n') : '• none'}\n\n` +
+        `Use \`${prefix}groupsudo on|off\` or \`${prefix}groupsudo add|remove @user\`.`,
+      );
+    }
+
+    if (['on', 'off'].includes(action)) {
+      const enabled = action === 'on';
+      await groups.set(m.chat, { privateAccess: enabled });
+      return m.reply(
+        enabled
+          ? '✅ This group can now use the bot while global mode remains *private*. Other groups are unchanged.'
+          : '🔒 Private-mode access is disabled for this group.',
+      );
+    }
+
+    if (!['add', 'remove', 'del', 'delete'].includes(action)) {
+      return m.reply(
+        `Usage:\n\`${prefix}groupsudo on\`\n\`${prefix}groupsudo off\`\n` +
+        `\`${prefix}groupsudo add @user\`\n\`${prefix}groupsudo remove @user\`\n\`${prefix}groupsudo list\``,
+      );
+    }
+
+    const jid = m.mentions?.[0] || m.quoted?.sender || (args[1] ? toJid(args[1]) : '');
+    const target = digits(jid);
+    if (!/^\d{8,15}$/.test(target)) {
+      return m.reply('Mention, reply to, or provide a valid international number.');
+    }
+
+    if (action === 'add') {
+      const next = [...new Set([...members, target])];
+      await groups.set(m.chat, { privateAccess: true, privateSudo: next });
+      return m.reply(
+        `👥 Added *${target}* as sudo for this group only.\n` +
+        'Private access for this group is enabled automatically.',
+      );
+    }
+
+    const next = members.filter((n) => n !== target);
+    await groups.set(m.chat, { privateSudo: next });
+    return m.reply(
+      next.length === members.length
+        ? `*${target}* was not a group sudo user.`
+        : `🔓 Removed *${target}* from this group's sudo list.`,
+    );
+  },
+);
+
+command(
+  {
+    name: 'nsfwdelivery',
+    alias: ['nsfwupload', 'nvd'],
+    category: 'owner',
+    desc: 'Choose view-once or MP4 document for NSFW videos in this group',
+    usage: '.nsfwdelivery viewonce · .nsfwdelivery document',
+    ownerOnly: true,
+    groupOnly: true,
+    react: '🔞',
+  },
+  async ({ m, args, isOwner, prefix, groupSettings }) => {
+    if (!isOwner) return m.reply('🔒 Only a permanent owner can change NSFW video delivery.');
+
+    const choice = (args[0] || 'status').toLowerCase();
+    const current = groupSettings.nsfwViewOnce === false ? 'MP4 Document' : 'View-Once Video';
+    if (choice === 'status') {
+      return m.reply(
+        `🔞 NSFW delivery in this group: *${current}*\n\n` +
+        `Use \`${prefix}nsfwdelivery viewonce\` or \`${prefix}nsfwdelivery document\`.`,
+      );
+    }
+
+    const viewOnceWords = ['viewonce', 'view-once', 'on'];
+    const documentWords = ['document', 'doc', 'off'];
+    if (![...viewOnceWords, ...documentWords].includes(choice)) {
+      return m.reply(`Choose \`viewonce\` or \`document\`. Current: *${current}*.`);
+    }
+
+    const viewOnce = viewOnceWords.includes(choice);
+    await groups.set(m.chat, { nsfwViewOnce: viewOnce });
+    return m.reply(
+      viewOnce
+        ? '🔞 NSFW videos in this group will be sent as *View-Once Video*.'
+        : '📄 NSFW videos in this group will be sent as *MP4 Documents*.',
+    );
+  },
+);
 
 command(
   {

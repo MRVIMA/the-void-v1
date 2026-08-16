@@ -5,10 +5,15 @@ import { initStore } from './store/index.js';
 import { loadCommands, commands } from './core/registry.js';
 // Passive features register themselves on import (anti-link, word filter).
 import './features/moderation.js';
-import { connect } from './core/socket.js';
+import './features/autoreply.js';
+import { connect, shutdownSocket } from './core/socket.js';
 import { startServer } from './web/server.js';
+import { installSignalLogFilter } from './lib/console-filter.js';
 
 const boot = log('boot');
+
+// Must be installed before the WhatsApp socket processes any Signal sessions.
+installSignalLogFilter();
 
 async function main() {
   /* 1 — configuration must be sane before anything touches the network */
@@ -73,8 +78,14 @@ async function main() {
     clearInterval(sweeper);
     clearInterval(keepalive);
     server.close();
-    await sock?.end?.(undefined);
-    await store.close?.();
+    const handlersDrained = await shutdownSocket(sock);
+    if (handlersDrained) {
+      await store.close?.();
+    } else {
+      // Closing Mongo while a handler still owns an operation produces
+      // MongoClientClosedError. Let process teardown close it instead.
+      boot.info('a long-running command is still stopping; storage will close with the process');
+    }
 
     /**
      * Do not call process.exit() here.
