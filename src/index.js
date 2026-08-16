@@ -25,14 +25,16 @@ async function main() {
     process.exit(1);
   }
 
-  /* 2 — storage, so settings exist before the first message arrives */
+  /* 2 — liveness must not wait on MongoDB, imports, or WhatsApp. Railway
+   * starts probing immediately and should see that the process is alive while
+   * slower dependencies initialize. Readiness remains 503 until connected. */
+  const server = startServer();
+
+  /* 3 — storage, so settings exist before the first message arrives */
   const store = await initStore();
 
-  /* 3 — commands */
+  /* 4 — commands */
   await loadCommands();
-
-  /* 4 — status server (safe to expose before WhatsApp connects) */
-  const server = startServer();
 
   banner([
     `${config.BOT_NAME}`,
