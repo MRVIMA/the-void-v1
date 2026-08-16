@@ -5,8 +5,10 @@ FROM node:24-slim
 # tini reaps the ffmpeg/yt-dlp child processes the bot spawns. Without an init
 # process those become zombies and eventually exhaust the process table.
 # gosu drops privileges in the entrypoint after fixing volume ownership.
+# youtube-dl-exec installs yt-dlp's Unix launcher, which requires Python both
+# during npm installation and whenever the bot invokes yt-dlp.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tini ca-certificates gosu \
+    && apt-get install -y --no-install-recommends tini ca-certificates gosu python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
