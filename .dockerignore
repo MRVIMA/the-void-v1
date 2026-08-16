@@ -24,7 +24,6 @@ package.json.original
 README.md
 README.legacy.md
 DEPLOY.md
-assets/
 *.log
 Dockerfile
 .dockerignore

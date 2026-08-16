@@ -20,6 +20,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
 COPY scripts ./scripts
+COPY assets ./assets
 
 # Writable state. Mount a volume at /app/session or the WhatsApp login is lost
 # on every redeploy and you will be re-scanning the QR each time.

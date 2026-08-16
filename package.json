@@ -37,5 +37,8 @@
     "sharp": "^0.35.3",
     "youtube-dl-exec": "^3.1.12",
     "yt-search": "^2.13.1"
+  },
+  "overrides": {
+    "minimatch": "3.1.5"
   }
 }

@@ -90,6 +90,21 @@ async function readFirst(name) {
   return null;
 }
 
+async function readConfiguredImage(file) {
+  const resolved = path.resolve(ROOT, file);
+  if (fileCache.has(resolved)) return fileCache.get(resolved);
+
+  try {
+    const buf = await fs.readFile(resolved);
+    const ready = await optimise(buf, 'menu');
+    fileCache.set(resolved, ready);
+    return ready;
+  } catch (err) {
+    logger.warn({ file: resolved, err: err.message }, 'configured menu image could not be loaded');
+    return null;
+  }
+}
+
 /**
  * @param {string} name menu name, e.g. 'menu' | 'alive' | 'group'
  * @returns {Promise<Buffer|null>}
@@ -99,12 +114,16 @@ export async function banner(name = 'menu') {
 
   let buf = await readFirst(name);
 
-  // MENU_IMAGE may point at a URL, which stands in for the default banner.
-  if (!buf && name === 'menu' && isUrl(config.MENU_IMAGE)) {
-    buf = await getBuffer(config.MENU_IMAGE).catch((err) => {
-      logger.warn({ err: err.message }, 'menu banner url failed');
-      return null;
-    });
+  // MENU_IMAGE may be a URL or a project-relative/absolute local path.
+  if (!buf && name === 'menu') {
+    if (isUrl(config.MENU_IMAGE)) {
+      buf = await getBuffer(config.MENU_IMAGE).catch((err) => {
+        logger.warn({ err: err.message }, 'menu banner url failed');
+        return null;
+      });
+    } else if (config.MENU_IMAGE) {
+      buf = await readConfiguredImage(config.MENU_IMAGE);
+    }
   }
 
   // Fall back to the generic banner for any menu without its own art.
