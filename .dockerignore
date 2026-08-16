@@ -1,0 +1,30 @@
+node_modules
+npm-debug.log*
+
+# Secrets and credentials must never enter an image layer.
+.env
+.env.*
+!.env.example
+session/
+auth_info_baileys/
+data/
+
+# Legacy v1 tree
+index.js
+command.js
+config.js
+yasiya-md.js
+lib/
+plugins/
+package.json.original
+
+.git
+.gitignore
+.gitattributes
+README.md
+README.legacy.md
+DEPLOY.md
+assets/
+*.log
+Dockerfile
+.dockerignore

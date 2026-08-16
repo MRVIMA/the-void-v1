@@ -1,0 +1,27 @@
+# Secrets — never commit these.
+# `*.env` is the important one: it catches files like
+# "Mongo DB/atlas-credentials.env" that ".env" and ".env.*" both miss.
+.env
+.env.*
+*.env
+*credentials*
+!.env.example
+
+# WhatsApp credentials. Anyone holding this folder controls the account.
+session/
+auth_info_baileys/
+
+# Local database
+data/
+
+node_modules/
+npm-debug.log*
+*.log
+
+# The v1 tree is deleted. legacy-v1-backup.zip is the only copy left — it is
+# ignored because it contains the original author's hardcoded database
+# credentials and API keys, which must never reach a repository.
+/legacy-v1-backup.zip
+
+.DS_Store
+Thumbs.db

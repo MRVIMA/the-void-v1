@@ -1,0 +1,17 @@
+# This repo is edited on Windows and runs in Linux containers. Without this,
+# git checks out shell scripts with CRLF endings and the container fails with
+# an unhelpful "no such file or directory" on the shebang line.
+
+* text=auto eol=lf
+
+*.sh   text eol=lf
+Dockerfile text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.mp3 binary
+*.mp4 binary
