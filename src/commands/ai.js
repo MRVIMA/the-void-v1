@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { command } from '../core/registry.js';
 import config from '../config.js';
 import { log } from '../lib/logger.js';
@@ -8,7 +8,7 @@ const logger = log('ai');
 
 /** Created lazily so a missing key never breaks startup. */
 let client = null;
-const ai = () => (client ??= new OpenAI({ apiKey: config.OPENAI_API_KEY }));
+const ai = () => (client ??= new GoogleGenAI({ apiKey: config.GEMINI_API_KEY }));
 
 /**
  * Short conversational memory, per user, in RAM only.
@@ -21,7 +21,7 @@ const histories = new Map();
 
 function remember(number, role, text) {
   const list = histories.get(number) ?? [];
-  list.push({ role, content: text });
+  list.push({ role, parts: [{ text }] });
   while (list.length > HISTORY_TURNS * 2) list.shift();
   histories.set(number, list);
 }
@@ -33,11 +33,11 @@ Use WhatsApp formatting (*bold*, _italic_) sparingly. Never use markdown heading
 command(
   {
     name: 'ai',
-    alias: ['openai', 'ask', 'chatgpt'],
+    alias: ['gemini', 'ask'],
     category: 'ai',
     desc: 'Ask the AI a question — reply to an image to ask about it',
     usage: '.ai why is the sky blue?',
-    requires: ['OPENAI_API_KEY'],
+    requires: ['GEMINI_API_KEY'],
     react: '🤖',
     cooldown: 5000,
   },
@@ -46,33 +46,35 @@ command(
     const prompt = text || (target ? 'Describe this in detail.' : '');
     if (!prompt) return m.reply('Ask me something, e.g. `.ai explain photosynthesis`');
 
-    let input;
+    const contents = [];
 
     // Vision: attach the quoted image so the model can actually see it.
     if (target && (target.type === 'imageMessage' || target.type === 'stickerMessage')) {
       const buffer = await target.download();
       const { mime } = await detectType(buffer);
-      input = [{
+      contents.push({
         role: 'user',
-        content: [
-          { type: 'input_image', image_url: `data:${mime};base64,${buffer.toString('base64')}` },
-          { type: 'input_text', text: prompt },
+        parts: [
+          { inlineData: { mimeType: mime, data: buffer.toString('base64') } },
+          { text: prompt },
         ],
-      }];
+      });
     } else {
-      input = [...(histories.get(number) ?? []), { role: 'user', content: prompt }];
+      contents.push(...(histories.get(number) ?? []), { role: 'user', parts: [{ text: prompt }] });
     }
 
-    const response = await ai().responses.create({
-      model: config.OPENAI_MODEL,
-      instructions: SYSTEM_PROMPT,
-      input,
-      max_output_tokens: 1200,
+    const response = await ai().models.generateContent({
+      model: config.GEMINI_MODEL,
+      contents,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        maxOutputTokens: 1200,
+      },
     });
 
-    const answer = response.output_text?.trim();
+    const answer = response.text?.trim();
     if (!answer) {
-      logger.warn({ status: response.status, error: response.error }, 'empty AI response');
+      logger.warn({ finishReason: response.candidates?.[0]?.finishReason }, 'empty AI response');
       return m.reply('🤖 I could not come up with an answer for that one.');
     }
 
@@ -106,7 +108,7 @@ command(
     category: 'ai',
     desc: 'Translate text into another language',
     usage: '.translate si Hello, how are you?  (or reply to a message)',
-    requires: ['OPENAI_API_KEY'],
+    requires: ['GEMINI_API_KEY'],
     react: '🌐',
     cooldown: 4000,
   },
@@ -117,13 +119,13 @@ command(
       return m.reply('Usage: `.translate <language> <text>`\nOr reply to a message with `.translate <language>`.');
     }
 
-    const response = await ai().responses.create({
-      model: config.OPENAI_MODEL,
-      input: `Translate the following into ${lang}. Reply with the translation only, no preamble:\n\n${body}`,
-      max_output_tokens: 900,
+    const response = await ai().models.generateContent({
+      model: config.GEMINI_MODEL,
+      contents: `Translate the following into ${lang}. Reply with the translation only, no preamble:\n\n${body}`,
+      config: { maxOutputTokens: 900 },
     });
 
-    const out = response.output_text?.trim();
+    const out = response.text?.trim();
     return m.reply(out ? `🌐 ${out}` : 'Could not translate that.');
   },
 );

@@ -7,7 +7,7 @@ import { bytes, truncate } from '../lib/format.js';
 
 const COMMON = {
   category: 'image',
-  requires: ['OPENAI_API_KEY'],
+  requires: ['GEMINI_API_KEY'],
   react: '🎨',
   cooldown: 30_000,
 };

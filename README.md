@@ -138,7 +138,7 @@ panel on the finished sticker.
 </details>
 
 <details>
-<summary><b>⌁ AI</b> — OpenAI</summary>
+<summary><b>⌁ AI</b> — Google Gemini</summary>
 
 `.ai` `.aiclear` `.translate`
 
@@ -155,6 +155,17 @@ per-user, in RAM only, and dies with the process. Nothing is written to disk.
 Generate artwork from a description, or reply to an existing image with
 `.editimage <instructions>`. Image requests run one at a time to keep memory
 and API usage predictable.
+
+</details>
+
+<details>
+<summary><b>⌁ DOCUMENT</b> — branded downloadable PDFs</summary>
+
+`.pdf` `.pdfstyle`
+
+Use `.pdf <description>` to generate a polished document, or reply to existing
+text with `.pdf` to turn it into a PDF. Branding is controlled with
+`PDF_BRAND_NAME`, `PDF_ACCENT_COLOR`, `PDF_FOOTER`, `PDF_LOGO`, and `PDF_FONT`.
 
 </details>
 
@@ -228,7 +239,7 @@ the bot never refuses to start over an integration.
 
 | Key | Unlocks | Free from |
 |---|---|---|
-| `OPENAI_API_KEY` | `.ai` `.translate` and all image commands | [platform.openai.com](https://platform.openai.com/api-keys) |
+| `GEMINI_API_KEY` | `.ai` `.translate`, `.pdf`, and all image commands | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | `TMDB_API_KEY` | `.movie` `.tv` `.trending` `.cast` | [themoviedb.org](https://www.themoviedb.org/settings/api) |
 | `OMDB_API_KEY` | `.imdb` | [omdbapi.com](https://www.omdbapi.com/apikey.aspx) |
 | `OPENSUBTITLES_API_KEY` | `.sub` `.subget` | [opensubtitles.com](https://www.opensubtitles.com/consumers) |
