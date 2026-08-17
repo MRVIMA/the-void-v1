@@ -138,7 +138,7 @@ panel on the finished sticker.
 </details>
 
 <details>
-<summary><b>⌁ AI</b> — Google Gemini</summary>
+<summary><b>⌁ AI</b> — OpenAI</summary>
 
 `.ai` `.aiclear` `.translate`
 
@@ -228,7 +228,7 @@ the bot never refuses to start over an integration.
 
 | Key | Unlocks | Free from |
 |---|---|---|
-| `GEMINI_API_KEY` | `.ai` `.translate` and all image commands | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| `OPENAI_API_KEY` | `.ai` `.translate` and all image commands | [platform.openai.com](https://platform.openai.com/api-keys) |
 | `TMDB_API_KEY` | `.movie` `.tv` `.trending` `.cast` | [themoviedb.org](https://www.themoviedb.org/settings/api) |
 | `OMDB_API_KEY` | `.imdb` | [omdbapi.com](https://www.omdbapi.com/apikey.aspx) |
 | `OPENSUBTITLES_API_KEY` | `.sub` `.subget` | [opensubtitles.com](https://www.opensubtitles.com/consumers) |

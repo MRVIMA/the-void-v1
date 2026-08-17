@@ -76,9 +76,9 @@ export const config = Object.freeze({
   DOWNLOAD_CONCURRENCY: Math.max(1, int('DOWNLOAD_CONCURRENCY', 2)),
 
   /* integrations (all optional — features degrade, nothing crashes) */
-  GEMINI_API_KEY: str('GEMINI_API_KEY'),
-  GEMINI_MODEL: str('GEMINI_MODEL', 'gemini-2.5-flash'),
-  GEMINI_IMAGE_MODEL: str('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image'),
+  OPENAI_API_KEY: str('OPENAI_API_KEY'),
+  OPENAI_MODEL: str('OPENAI_MODEL', 'gpt-5.6-luna'),
+  OPENAI_IMAGE_MODEL: str('OPENAI_IMAGE_MODEL', 'gpt-image-2'),
   OPENWEATHER_API_KEY: str('OPENWEATHER_API_KEY'),
   TMDB_API_KEY: str('TMDB_API_KEY'),
   OMDB_API_KEY: str('OMDB_API_KEY'),
@@ -138,7 +138,7 @@ export function validateConfig() {
     fatal.push('PAIR_NUMBER must be a full international number, digits only.');
   }
 
-  if (!config.GEMINI_API_KEY && config.ENABLE_AI) warn.push('GEMINI_API_KEY missing — AI commands disabled.');
+  if (!config.OPENAI_API_KEY && config.ENABLE_AI) warn.push('OPENAI_API_KEY missing — AI commands disabled.');
   if (!config.OPENWEATHER_API_KEY) warn.push('OPENWEATHER_API_KEY missing — .weather disabled.');
   if (!config.TMDB_API_KEY) warn.push('TMDB_API_KEY missing — .tmdb disabled.');
   if (!config.MONGO_URI) warn.push('MONGO_URI missing — using local SQLite store.');
